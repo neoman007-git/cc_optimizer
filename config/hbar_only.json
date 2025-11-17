@@ -1,0 +1,19 @@
+{
+  "metadata": {
+    "total_coins": 1,
+    "exclude_stablecoins": true,
+    "top_n": 1
+  },
+  "coins": [
+    {
+      "id": "hedera-hashgraph",
+      "symbol": "HBAR",
+      "name": "Hedera",
+      "market_cap": 8353768078,
+      "market_cap_rank": 26,
+      "binance_spot": "HBARUSDT",
+      "binance_futures": "HBARUSDT",
+      "available_on_binance": true
+    }
+  ]
+}
