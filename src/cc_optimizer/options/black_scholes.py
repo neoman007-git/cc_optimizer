@@ -241,7 +241,7 @@ class BlackScholesModel:
         T: float,
         r: float,
         token: str,
-        tenor_days: int,
+        tenor_days: float,
         strike_percent: float = 100.0,
         option_type: str = 'call',
         iv_model: str = 'model_01',
@@ -258,8 +258,8 @@ class BlackScholesModel:
             K: Strike price
             T: Time to expiration in years
             r: Risk-free interest rate
-            token: Token symbol (e.g., 'BTC', 'ETH')
-            tenor_days: Option tenor in days (e.g., 7, 30, 90)
+            token: Token symbol (e.g., 'BTC', 'ETH', 'HBAR')
+            tenor_days: Option tenor in days (e.g., 7, 30, 90). Can be fractional.
             strike_percent: Strike as percentage of spot (e.g., 100.0 for ATM)
             option_type: 'call' or 'put'
             iv_model: IV model to use ('model_01', etc.)
@@ -269,41 +269,47 @@ class BlackScholesModel:
             BlackScholesModel instance with IV from hist_vol_model
 
         Raises:
-            ImportError: If hist_vol_model is not accessible
+            ImportError: If hist_vol_model package is not installed
             ValueError: If IV cannot be computed
 
         Example:
             >>> model = BlackScholesModel.from_iv_model(
-            ...     S=50000, K=50000, T=30/365, r=0.0,
-            ...     token='BTC', tenor_days=30, strike_percent=100.0,
+            ...     S=0.15, K=0.15, T=30/365, r=0.0,
+            ...     token='HBAR', tenor_days=30.0, strike_percent=100.0,
             ...     option_type='call'
             ... )
             >>> price = model.price()
+
+        Note:
+            hist_vol_model must be installed as a package:
+            pip install -e /path/to/hist_vol_model
         """
-        # Import here to avoid circular dependencies and allow optional integration
-        import sys
-        from pathlib import Path
-
-        # Add hist_vol_model to path
-        hist_vol_path = Path(__file__).parents[4] / 'hist_vol_model' / 'src'
-
-        if not hist_vol_path.exists():
-            raise ImportError(
-                f"hist_vol_model not found at {hist_vol_path}. "
-                "Please ensure the hist_vol_model project is in the expected location."
-            )
-
-        sys.path.insert(0, str(hist_vol_path))
-
+        # Import here to allow optional integration
         try:
-            from hist_vol_model.models.iv_api import compute_iv
+            from .iv_helpers import compute_iv_with_cache
         except ImportError as e:
             raise ImportError(
-                f"Could not import compute_iv from hist_vol_model: {e}"
+                "hist_vol_model package not found. "
+                "Please install it with: pip install -e /Users/neo/Velar/hist_vol_model"
             ) from e
 
-        # Get IV from hist_vol_model
-        sigma = compute_iv(iv_model, token, tenor_days, strike_percent, quote_type)
+        # Get IV from hist_vol_model (with caching for performance)
+        try:
+            sigma = compute_iv_with_cache(
+                model=iv_model,
+                token=token,
+                tenor_days=tenor_days,
+                strike_percent=strike_percent,
+                quote_type=quote_type,
+                use_cache=True
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Failed to compute IV from hist_vol_model. "
+                f"Parameters: token={token}, tenor_days={tenor_days}, "
+                f"strike_percent={strike_percent}, quote_type={quote_type}. "
+                f"Error: {e}"
+            ) from e
 
         if sigma is None or np.isnan(sigma) or sigma <= 0:
             raise ValueError(
