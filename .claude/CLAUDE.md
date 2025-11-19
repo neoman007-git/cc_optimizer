@@ -474,3 +474,185 @@ The implementation handles edge cases:
 - σ → ∞: Handled gracefully
 
 All edge cases tested in `tests/test_black_scholes.py`.
+
+## Backtest Framework
+
+### Overview
+
+A comprehensive backtesting framework for systematic option selling strategies on cryptocurrency assets. Implements a **covered call** strategy with rolling 7-day positions.
+
+**Key Features:**
+- ✅ Dollar-based accounting (not percentage-based)
+- ✅ Multiple parallel scenarios to remove start-date bias
+- ✅ Cash-settled options (no physical delivery)
+- ✅ Regime-based analysis across different market periods
+- ✅ Comprehensive statistics and visualization
+
+### Strategy Description
+
+**Covered Call Strategy:**
+1. Hold 1 HBAR throughout the entire period
+2. Every 7 days, sell 1 call option at strike% above spot
+3. Collect premium upfront (cash credit)
+4. At maturity:
+   - If OTM: Keep premium, roll to new option
+   - If ITM: Pay cash settlement, keep HBAR, roll to new option
+5. Portfolio NAV = HBAR value + cumulative cash
+
+**Key Parameters:**
+- `rv_lookback_days`: Option maturity in days (default: 7)
+- `strike_percent`: Strike as % of spot (e.g., 1.10 = 110% strike)
+- `vol_spread`: Spread subtracted from realized vol to get implied vol (e.g., 0.10 = 10%)
+- `risk_free_rate`: Discount rate (typically 0 for crypto)
+- `cost_of_carry`: Cost of carry parameter (typically 0 for crypto)
+
+### Files and Structure
+
+```
+scripts/
+├── backtest.py                      # Original implementation (percentage-based, deprecated)
+├── backtest_covered_call.py         # Corrected dollar-based covered call backtest ⭐
+├── run_hbar_backtest.py            # Single period HBAR backtest
+├── sanity_check_backtest.py        # Sanity check with 200% strikes
+├── multi_period_sanity_check.py    # Multi-period regime analysis
+└── multi_period_covered_call.py    # Multi-period with corrected logic ⭐
+
+data/processed/
+└── HBAR_daily.parquet              # Resampled daily HBAR price data
+
+docs/
+└── BACKTEST_INSTRUCTIONS.md        # Detailed backtest documentation
+
+output/
+├── HBAR_all_scenarios_nav.png      # NAV chart for all scenarios
+├── HBAR_sanity_check_nav.png       # Sanity check results
+└── multi_period/                    # Multi-period analysis outputs
+    ├── Jan_2021_scenarios.png
+    ├── Jan_2022_scenarios.png
+    ├── Jan_2023_scenarios.png
+    ├── Jan_2024_scenarios.png
+    ├── comparison_chart.png
+    └── comparison_summary.csv
+```
+
+### NAV Calculation Logic (Corrected)
+
+**Dollar-Based Approach:**
+```python
+# Initial state
+hbar_quantity = 1.0  # Fixed
+cash_balance = 0.0
+initial_spot = S0
+
+# For each option roll
+# Day 0 (Inception):
+premium_received = BS_premium(spot, strike, T, r, sigma)
+cash_balance += premium_received
+
+# Day 7 (Maturity):
+payoff = -max(0, fixing_price - strike_price)
+cash_balance += payoff
+
+# Portfolio value
+hbar_value = hbar_quantity * current_spot_price
+portfolio_value = hbar_value + cash_balance
+
+# Final NAV (normalized to initial spot)
+nav = portfolio_value / initial_spot
+```
+
+**Key Insight:** This approach avoids the multiplicative compounding issue of percentage-based calculations.
+
+### Multiple Scenario Design
+
+To remove start-date bias, the backtest runs N scenarios (where N = `rv_lookback_days`):
+- Scenario 1 starts on day 7
+- Scenario 2 starts on day 8
+- ...
+- Scenario N starts on day (7 + N - 1)
+
+Each scenario operates independently with the same parameters. Results are averaged across scenarios to get debiased performance metrics.
+
+### Usage Example
+
+```python
+from scripts.backtest_covered_call import backtest_covered_call_strategy
+
+# Load HBAR daily data
+df = pd.read_parquet('data/processed/HBAR_daily.parquet')
+
+# Run backtest
+results = backtest_covered_call_strategy(
+    df,
+    rv_lookback_days=7,       # 7-day options
+    strike_percent=1.10,      # 110% strike (10% OTM)
+    vol_spread=0.10,          # IV = RV - 10%
+    risk_free_rate=0.0,       # 0% for crypto
+    cost_of_carry=0.0         # 0% for crypto
+)
+
+# View averaged statistics
+print_summary(results)
+plot_all_scenarios(results)
+```
+
+### Key Learnings from Analysis
+
+**1. HBAR Extreme Volatility:**
+- HBAR can gain 100-200% in 7 days (observed multiple times)
+- Even 200% OTM strikes get exercised during explosive rallies
+- Feb 2020: 3.05x gain in 7 days (-105% payoff on short call)
+- Nov 2024: 2.47x gain in 7 days (+147% in 7 days)
+
+**2. Multi-Period Analysis:**
+- Tested 4 starting periods: Jan 2021, Jan 2022, Jan 2023, Jan 2024
+- All periods ran to Oct 2025 (same end date)
+- All periods unprofitable even with 200% strikes (avg NAV ~0.90-0.93)
+- Late 2024 explosion affected all periods, demonstrating tail risk
+
+**3. Strategy Implications:**
+- Covered calls on high-volatility assets require very wide strikes
+- Single extreme event can wipe out years of premium collection
+- Risk controls essential (stop losses, position limits, volatility filters)
+
+### Comparison: Old vs New Implementation
+
+**Old (Incorrect - Percentage-Based):**
+- Calculated P&L as percentage of spot at inception
+- Used multiplicative compounding: `nav = nav * (1 + pnl_pct)`
+- Led to NAV going negative when payoff > spot_at_inception
+- Conceptually unclear (mixing different percentage bases)
+
+**New (Correct - Dollar-Based):**
+- Tracks actual dollar cashflows (premiums + payoffs)
+- Portfolio value = HBAR value + cash
+- NAV normalized at the end: `nav = portfolio_value / initial_spot`
+- Clean, intuitive accounting
+
+### Output Files
+
+**Per-Scenario Data:**
+- Date, inception date, maturity date
+- Spot at inception, strike price, fixing price
+- Premium received, payoff paid
+- Cumulative cash, HBAR value, portfolio value, NAV
+
+**Summary Statistics (Averaged Across Scenarios):**
+- Number of trades
+- Final NAV
+- Total return %, annualized return %
+- Maximum drawdown %
+- Win rate %
+- Average P&L per trade
+- Best/worst trade
+
+### Future Enhancements
+
+- [ ] Implement stop-loss logic
+- [ ] Add position sizing (scale with capital)
+- [ ] Volatility regime filters
+- [ ] Test on multiple tokens (BTC, ETH, etc.)
+- [ ] Credit spreads (buy protection to cap max loss)
+- [ ] Dynamic strike selection based on volatility
+- [ ] Real-time Greeks tracking
+- [ ] Transaction costs and slippage modeling
