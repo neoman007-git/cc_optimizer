@@ -646,13 +646,97 @@ plot_all_scenarios(results)
 - Average P&L per trade
 - Best/worst trade
 
+### Corrected Implementation Results (CRITICAL FINDINGS)
+
+After implementing the dollar-based covered call backtest, we discovered **dramatic differences** in results compared to the percentage-based approach:
+
+#### **Implementation Comparison (200% Strikes):**
+
+| Metric | Old (Percentage-Based) | New (Dollar-Based) | Difference |
+|--------|----------------------|-------------------|------------|
+| **Avg Final NAV** | 0.42 | **4.48** | **+4.06** |
+| **Avg Return** | -58% | **+348%** | **+406%** |
+| **Negative NAVs** | 1/7 | 0/7 | ✓ Fixed |
+| **Profitable Scenarios** | 1/7 | **7/7** | All profitable |
+
+**Why the massive difference?**
+- Old implementation only tracked option P&L (ignored underlying HBAR appreciation)
+- New implementation correctly includes: **Portfolio = HBAR value + cash balance**
+- HBAR appreciated 4-8x over the period → huge impact on NAV
+
+#### **Strike Selection is CRITICAL (Sept 2019 - Oct 2025):**
+
+**200% Strikes (Deep OTM):**
+- ✅ **Average NAV: 4.48** (+348% return)
+- ✅ All 7 scenarios profitable
+- ✅ Win rate: 98% (calls rarely exercised)
+- ✅ Strategy captures most of HBAR's 5-9x appreciation
+- ✅ Premiums are tiny but all gains kept
+
+**110% Strikes (10% OTM):**
+- ❌ **Average NAV: -1.43** (-143% loss)
+- ❌ Only 2/7 scenarios profitable
+- ❌ Win rate: 80% (frequent ITM settlements)
+- ❌ **Lost money despite HBAR rallying 5-9x!**
+- ❌ Cash balance drained by ITM settlements exceeds HBAR gains
+
+#### **Multi-Period Analysis (110% Strikes):**
+
+| Period | Avg NAV | Avg Return | Max Profitable |
+|--------|---------|------------|----------------|
+| Jan 2021 | -0.56 | -156% | 1/7 |
+| Jan 2022 | 0.20 | -80% | 0/7 |
+| Jan 2023 | 0.17 | -83% | 1/7 |
+| Jan 2024 | 0.21 | -79% | 1/7 |
+
+**All periods unprofitable** with 110% strikes, demonstrating that tight strikes destroy returns on high-volatility assets.
+
+#### **Key Discoveries:**
+
+1. **NAV Includes Full Portfolio:**
+   ```
+   NAV = (HBAR_value + cash_balance) / initial_spot
+   ```
+   - HBAR value = 1.0 * current_spot_price (you hold HBAR throughout)
+   - Cash balance = cumulative premiums - cumulative ITM settlements
+
+2. **How You Can Lose Money Despite HBAR Rallying:**
+   - Example: HBAR goes from $0.0325 → $0.20 (6x gain)
+   - But with 110% strikes, you pay out MORE in ITM settlements than you gain
+   - Cash balance becomes deeply negative
+   - Final: portfolio_value = $0.20 (HBAR) - $0.25 (cash) = **-$0.05**
+
+3. **Strike Selection Guidelines for HBAR:**
+   - **150%+ strikes**: Likely profitable (need testing)
+   - **200% strikes**: Highly profitable (+348% avg)
+   - **110% strikes**: Unprofitable (-143% avg)
+   - **Rule of thumb**: For assets that can 2x in 7 days, use 200%+ strikes
+
+4. **Covered Calls on High-Vol Assets:**
+   - Traditional 5-10% OTM strikes DON'T WORK on crypto
+   - Need 50-100% OTM strikes to avoid constant ITM settlements
+   - Small premiums are acceptable if you keep the upside gains
+
+#### **Production-Ready Scripts:**
+
+**Main Implementation:**
+- `scripts/backtest_covered_call.py` ⭐ - Use this (dollar-based, correct)
+- `scripts/backtest.py` - Deprecated (percentage-based, incorrect)
+
+**Analysis Tools:**
+- `scripts/compare_old_vs_new.py` - Compare implementations
+- `scripts/multi_period_covered_call.py` - Multi-period analysis with correct logic
+- `scripts/run_hbar_backtest.py` - Quick single-period test
+
 ### Future Enhancements
 
-- [ ] Implement stop-loss logic
+- [ ] Test optimal strike levels (120%, 130%, 150%, 175%)
+- [ ] Implement stop-loss logic (exit if cash < -50% of HBAR value)
 - [ ] Add position sizing (scale with capital)
-- [ ] Volatility regime filters
-- [ ] Test on multiple tokens (BTC, ETH, etc.)
+- [ ] Volatility regime filters (pause selling in extreme vol)
+- [ ] Test on multiple tokens (BTC, ETH, SOL, etc.)
 - [ ] Credit spreads (buy protection to cap max loss)
-- [ ] Dynamic strike selection based on volatility
+- [ ] Dynamic strike selection based on recent volatility
 - [ ] Real-time Greeks tracking
 - [ ] Transaction costs and slippage modeling
+- [ ] Compare against buy-and-hold benchmark
