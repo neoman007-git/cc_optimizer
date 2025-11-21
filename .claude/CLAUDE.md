@@ -385,16 +385,28 @@ When working with this project:
 - [x] **Example Jupyter notebook with visualizations**
 - [x] **Backtesting example script + cache invalidation demo**
 - [x] **Validation against py_vollib reference**
+- [x] **Dollar-based covered call backtest framework** (Phase 01)
+- [x] **Parameter optimization sweep (49 combinations)** (Phase 01)
+- [x] **Multi-period regime analysis (2021-2024)** (Phase 01)
+- [x] **Comprehensive visualization (heatmaps, NAV charts)** (Phase 01)
+- [x] **Phase 01 documentation and progress report** (Phase 01)
 
 ### Roadmap
 
-**Near-term (Next 1-2 months):**
+**Phase 02 - Near-term Priorities:**
+- [ ] **Risk Management**: Stop-loss logic, position sizing, max drawdown limits
+- [ ] **Volatility Filters**: Regime detection, pause selling in extreme vol
+- [ ] **Multi-Asset Testing**: Extend to BTC, ETH, SOL
+- [ ] **Transaction Costs**: Model slippage and trading fees
 - [ ] Implied volatility solver (Newton-Raphson method)
-- [ ] Payoff diagrams and P&L visualization
-- [x] ~~Batch pricing optimization~~ (Achieved via caching - 100-1000x speedup)
 - [ ] Real-time market data integration (Deribit API)
 - [ ] Compare BS prices with actual market prices
-- [ ] Extend backtesting framework with more strategies
+
+**Completed:**
+- [x] ~~Batch pricing optimization~~ (Achieved via caching - 100-1000x speedup)
+- [x] ~~Extend backtesting framework~~ (Dollar-based covered call complete)
+- [x] ~~Parameter optimization~~ (49 combinations tested)
+- [x] ~~Multi-period analysis~~ (Regime analysis 2021-2024)
 
 **Medium-term (3-6 months):**
 - [ ] Advanced Greeks (Vanna, Volga, Charm, etc.)
@@ -402,13 +414,15 @@ When working with this project:
 - [ ] Jump-diffusion models (Merton, Kou)
 - [ ] Stochastic volatility models (Heston)
 - [ ] Greeks surfaces and risk analytics
+- [ ] Credit spreads to cap maximum loss
+- [ ] Dynamic strike selection based on volatility
 
 **Long-term (6+ months):**
 - [ ] Machine learning-based pricing corrections
 - [ ] Multi-asset portfolio optimization
-- [ ] Options strategy backtesting framework
 - [ ] Real-time portfolio Greeks monitoring
 - [ ] Integration with trading execution
+- [ ] Payoff diagrams and P&L visualization
 
 ## Related Projects
 
@@ -515,15 +529,26 @@ scripts/
 ├── run_hbar_backtest.py            # Single period HBAR backtest
 ├── sanity_check_backtest.py        # Sanity check with 200% strikes
 ├── multi_period_sanity_check.py    # Multi-period regime analysis
-└── multi_period_covered_call.py    # Multi-period with corrected logic ⭐
+├── multi_period_covered_call.py    # Multi-period with corrected logic ⭐
+├── parameter_optimization.py        # Single-period parameter sweep ⭐
+├── parameter_optimization_multi_period.py  # Multi-period parameter sweep
+├── compare_old_vs_new.py           # Compare implementations
+└── plot_incremental_value.py       # Visualization utilities
 
 data/processed/
 └── HBAR_daily.parquet              # Resampled daily HBAR price data
 
 docs/
-└── BACKTEST_INSTRUCTIONS.md        # Detailed backtest documentation
+├── BACKTEST_INSTRUCTIONS.md        # Detailed backtest documentation
+└── phase_01/                       # Phase documentation
+    └── progress.md                 # Phase 01 progress report ⭐
 
 output/
+├── parameter_optimization_results.csv      # Full parameter sweep (49 combinations)
+├── parameter_optimization_heatmap.png      # Heatmap visualization
+├── multi_period_summary.csv                # Multi-period regime summary
+├── parameter_optimization_multi_period_heatmaps.png
+├── incremental_value_heatmaps.png
 ├── HBAR_all_scenarios_nav.png      # NAV chart for all scenarios
 ├── HBAR_sanity_check_nav.png       # Sanity check results
 └── multi_period/                    # Multi-period analysis outputs
@@ -531,6 +556,10 @@ output/
     ├── Jan_2022_scenarios.png
     ├── Jan_2023_scenarios.png
     ├── Jan_2024_scenarios.png
+    ├── 2021_results.csv
+    ├── 2022_results.csv
+    ├── 2023_results.csv
+    ├── 2024_results.csv
     ├── comparison_chart.png
     └── comparison_summary.csv
 ```
@@ -730,7 +759,7 @@ After implementing the dollar-based covered call backtest, we discovered **drama
 
 ### Future Enhancements
 
-- [ ] Test optimal strike levels (120%, 130%, 150%, 175%)
+- [x] Test optimal strike levels (120%, 130%, 150%, 175%) ✅ **Completed in Phase 01**
 - [ ] Implement stop-loss logic (exit if cash < -50% of HBAR value)
 - [ ] Add position sizing (scale with capital)
 - [ ] Volatility regime filters (pause selling in extreme vol)
@@ -740,3 +769,75 @@ After implementing the dollar-based covered call backtest, we discovered **drama
 - [ ] Real-time Greeks tracking
 - [ ] Transaction costs and slippage modeling
 - [ ] Compare against buy-and-hold benchmark
+
+## Parameter Optimization Results (Phase 01)
+
+### Overview
+
+Comprehensive parameter sweep across 49 combinations (7 strike levels × 7 maturities) on HBAR from Sept 2019 - Oct 2025.
+
+**Parameters Tested:**
+- **Strikes**: 110%, 120%, 130%, 140%, 150%, 175%, 200%
+- **Maturities**: 3, 5, 7, 10, 14, 21, 30 days
+
+### Best Performing Combinations
+
+| Rank | Strike | Maturity | Avg NAV | Avg Return | Win Rate | % Profitable |
+|------|--------|----------|---------|------------|----------|--------------|
+| 1 | 200% | 3-day | 4.85 | +385% | 100% | 100% |
+| 2 | 175% | 3-day | 4.76 | +376% | 99.6% | 100% |
+| 3 | 200% | 5-day | 4.24 | +324% | 99.6% | 100% |
+| 4 | 150% | 3-day | 4.20 | +320% | 99.5% | 100% |
+| 5 | 200% | 7-day | 3.99 | +299% | 99.1% | 100% |
+
+### Worst Performing Combinations
+
+| Rank | Strike | Maturity | Avg NAV | Avg Return | Win Rate | % Profitable |
+|------|--------|----------|---------|------------|----------|--------------|
+| 1 | 110% | 3-day | 0.06 | -94% | 89% | 33% |
+| 2 | 110% | 7-day | 0.17 | -83% | 81% | 14% |
+| 3 | 110% | 5-day | 0.45 | -55% | 85% | 20% |
+| 4 | 110% | 10-day | 0.55 | -45% | 77% | 20% |
+
+### Multi-Period Regime Analysis (1-Year Forward Periods)
+
+| Start Period | Avg Return | Best | Worst | % Profitable |
+|--------------|------------|------|-------|--------------|
+| **Jan 2021** | **+433%** | +983% | +142% | 100% |
+| **Jan 2022** | **-78%** | -55% | -88% | 0% |
+| **Jan 2023** | **+81%** | +129% | +11% | 100% |
+| **Jan 2024** | **+137%** | +248% | +39% | 100% |
+
+**Key Observations:**
+- **2021 (Bull)**: All parameters profitable, explosive gains possible
+- **2022 (Bear)**: All parameters unprofitable, strategy fails in bear markets
+- **2023-2024**: Moderate recovery, most parameters work with wide strikes
+
+### Key Insights
+
+1. **Strike Selection Dominates Returns**
+   - 200% strikes: +385% avg return
+   - 110% strikes: -94% avg return
+   - Difference: **479 percentage points**
+
+2. **Shorter Maturities Generally Better**
+   - 3-day options outperform 30-day options
+   - More frequent rolling captures more premium
+   - But also more transaction costs (not modeled)
+
+3. **Win Rate vs. Profitability**
+   - High win rate (80-90%) doesn't guarantee profitability
+   - ITM settlements on big moves can wipe out many wins
+   - Need very wide strikes to avoid tail risk
+
+4. **Market Regime Matters**
+   - Same parameters: +433% in 2021, -78% in 2022
+   - Need regime detection or volatility filters
+   - Buy-and-hold may be better in strong trends
+
+### Detailed Results
+
+Full results available in:
+- `output/parameter_optimization_results.csv` - All 49 combinations
+- `output/multi_period_summary.csv` - Regime analysis
+- `docs/phase_01/progress.md` - Complete analysis
